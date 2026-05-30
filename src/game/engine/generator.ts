@@ -5,9 +5,8 @@ import { summarizeSupporters, validatePuzzle } from './validation'
 
 const HORIZONTAL = { width: 6, height: 2 } as const
 const VERTICAL = { width: 2, height: 6 } as const
-const BASE_BOUND_WIDTH = 18
-const BASE_BOUND_HEIGHT = 20
-const TOP_CANDIDATE_POOL = 5
+const BOUND_PADDING = 2
+const TOP_CANDIDATE_POOL = 12
 
 function shuffle<T>(items: T[], random: () => number) {
   const copy = [...items]
@@ -39,12 +38,48 @@ function footprint(blocks: PlacedBlock[]) {
   }
 }
 
+function overlapRange(aStart: number, aEnd: number, bStart: number, bEnd: number) {
+  const start = Math.max(aStart, bStart)
+  const end = Math.min(aEnd, bEnd)
+
+  return end > start ? { start, end } : null
+}
+
+function touches(a: PlacedBlock, b: PlacedBlock) {
+  const horizontalTouch =
+    (a.x + a.width === b.x || b.x + b.width === a.x) &&
+    overlapRange(a.y, a.y + a.height, b.y, b.y + b.height)
+  const verticalTouch =
+    (a.y + a.height === b.y || b.y + b.height === a.y) &&
+    overlapRange(a.x, a.x + a.width, b.x, b.x + b.width)
+
+  return Boolean(horizontalTouch || verticalTouch)
+}
+
+function normalizeBlocks(blocks: PlacedBlock[]) {
+  if (blocks.length === 0) {
+    return blocks
+  }
+
+  const minX = Math.min(...blocks.map((block) => block.x))
+  if (minX >= 0) {
+    return blocks
+  }
+
+  const shift = -minX
+  return blocks.map((block) => ({
+    ...block,
+    x: block.x + shift,
+  }))
+}
+
 function estimateBounds(blocks: PlacedBlock[]) {
-  const span = footprint(blocks)
+  const normalized = normalizeBlocks(blocks)
+  const span = footprint(normalized)
 
   return {
-    boardWidth: Math.max(BASE_BOUND_WIDTH, span.maxX + 2),
-    maxHeight: Math.max(BASE_BOUND_HEIGHT, span.maxY + 2),
+    boardWidth: span.width + BOUND_PADDING * 2,
+    maxHeight: span.height + BOUND_PADDING * 2,
   }
 }
 
@@ -96,9 +131,6 @@ function addVerticalContacts(
   }
 
   for (let x = existing.x - shape.width + 1; x <= existing.x + existing.width - 1; x += 1) {
-    if (x < 0) {
-      continue
-    }
     const block = buildCandidate(item, orientation, x, anchorY)
     out.set(`${block.orientation}:${block.x}:${block.y}`, block)
   }
@@ -122,13 +154,65 @@ function frontierCandidates(
   return [...map.values()]
 }
 
+function orientationMixScore(placed: PlacedBlock[], candidate: PlacedBlock) {
+  const touching = placed.filter((block) => touches(block, candidate))
+  if (touching.length === 0) {
+    return -1
+  }
+
+  const oppositeCount = touching.filter(
+    (block) => block.orientation !== candidate.orientation,
+  ).length
+  const sameCount = touching.length - oppositeCount
+  return oppositeCount * 0.24 - sameCount * 0.08
+}
+
+function opennessScore(placed: PlacedBlock[], candidate: PlacedBlock) {
+  const neighbors = placed.filter((block) => {
+    const horizontalGap = Math.max(
+      0,
+      Math.max(block.x - (candidate.x + candidate.width), candidate.x - (block.x + block.width)),
+    )
+    const verticalGap = Math.max(
+      0,
+      Math.max(block.y - (candidate.y + candidate.height), candidate.y - (block.y + block.height)),
+    )
+
+    return horizontalGap <= 4 && verticalGap <= 4
+  }).length
+
+  if (neighbors <= 2) {
+    return 0.18
+  }
+
+  if (neighbors === 3) {
+    return 0.08
+  }
+
+  return -0.06 * (neighbors - 3)
+}
+
+function balancedGrowthScore(base: ReturnType<typeof footprint>, next: ReturnType<typeof footprint>) {
+  const widthIncrease = Math.max(0, next.width - base.width)
+  const heightIncrease = Math.max(0, next.height - base.height)
+  const totalGrowth = widthIncrease + heightIncrease
+
+  if (totalGrowth === 0) {
+    return 0
+  }
+
+  const imbalance = Math.abs(widthIncrease - heightIncrease)
+  return totalGrowth * 0.05 - imbalance * 0.04
+}
+
 function scoreCandidate(
   placed: PlacedBlock[],
   candidate: PlacedBlock,
   random: () => number,
 ): { score: number; validationMargin: number } | null {
   const draftBlocks = [...placed, candidate]
-  const draftBounds = estimateBounds(draftBlocks)
+  const normalizedDraft = normalizeBlocks(draftBlocks)
+  const draftBounds = estimateBounds(normalizedDraft)
   const validation = validatePuzzle({
     id: 'draft',
     name: 'draft',
@@ -136,7 +220,7 @@ function scoreCandidate(
     setCount: 1,
     boardWidth: draftBounds.boardWidth,
     maxHeight: draftBounds.maxHeight,
-    blocks: draftBlocks,
+    blocks: normalizedDraft,
   })
 
   if (!validation.isValid) {
@@ -146,12 +230,23 @@ function scoreCandidate(
   const baseFootprint = footprint(placed)
   const nextFootprint = footprint(draftBlocks)
   const widthIncrease = Math.max(0, nextFootprint.width - baseFootprint.width)
-  const heightIncrease = Math.max(0, nextFootprint.height - baseFootprint.height)
   const stability = Math.max(0, validation.stabilityMargin)
+  const touchingCount = placed.filter((block) => touches(block, candidate)).length
+  const candidateCenter = candidate.x + candidate.width / 2
+  const draftCenter = nextFootprint.minX + nextFootprint.width / 2
+  const centerPenalty = Math.abs(candidateCenter - draftCenter)
+  const orientationMix = orientationMixScore(placed, candidate)
+  const openness = opennessScore(placed, candidate)
+  const growthBalance = balancedGrowthScore(baseFootprint, nextFootprint)
+  const widthPenalty = Math.max(0, widthIncrease - 4) * 0.04
   const score =
-    stability * 0.6 +
-    heightIncrease * 0.22 -
-    widthIncrease * 0.25 +
+    stability * 0.55 +
+    touchingCount * 0.14 +
+    orientationMix +
+    openness +
+    growthBalance -
+    widthPenalty -
+    centerPenalty * 0.012 +
     random() * 0.06
 
   return { score, validationMargin: validation.stabilityMargin }
@@ -172,7 +267,7 @@ export function generatePuzzle(config: GenerationConfig): {
       id: firstItem.id,
       color: firstItem.color,
       orientation: 'horizontal',
-      x: 0,
+      x: -Math.floor(HORIZONTAL.width / 2),
       y: 0,
       width: HORIZONTAL.width,
       height: HORIZONTAL.height,
@@ -197,8 +292,19 @@ export function generatePuzzle(config: GenerationConfig): {
 
     if (ranked.length > 0) {
       const poolSize = Math.min(TOP_CANDIDATE_POOL, ranked.length)
-      const pick = ranked[Math.floor(random() * poolSize)]
-      placedBlock = pick.candidate
+      const pool = ranked.slice(0, poolSize)
+      const totalWeight = pool.reduce((sum, _, index) => sum + (poolSize - index), 0)
+      let cursor = random() * totalWeight
+
+      for (let index = 0; index < pool.length; index += 1) {
+        cursor -= poolSize - index
+        if (cursor <= 0) {
+          placedBlock = pool[index].candidate
+          break
+        }
+      }
+
+      placedBlock ??= pool[pool.length - 1].candidate
     }
 
     if (!placedBlock) {
@@ -208,7 +314,8 @@ export function generatePuzzle(config: GenerationConfig): {
     placed.push(placedBlock)
   }
 
-  const bounds = estimateBounds(placed)
+  const normalizedPlaced = normalizeBlocks(placed)
+  const bounds = estimateBounds(normalizedPlaced)
 
   const puzzle: PuzzleCard = {
     id: config.seed,
@@ -217,7 +324,7 @@ export function generatePuzzle(config: GenerationConfig): {
     setCount: config.setCount,
     boardWidth: bounds.boardWidth,
     maxHeight: bounds.maxHeight,
-    blocks: placed.sort((left, right) => left.y - right.y || left.x - right.x),
+    blocks: normalizedPlaced.sort((left, right) => left.y - right.y || left.x - right.x),
   }
   const validation = validatePuzzle(puzzle)
 

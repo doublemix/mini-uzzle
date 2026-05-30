@@ -74,6 +74,7 @@ export function useGameState() {
     puzzle,
     validation,
     totalBlocks: puzzle.blocks.length,
+    interestingness: puzzle.interestingness ?? 0,
     stabilityMargin: validation.stabilityMargin,
     regenerate,
   }

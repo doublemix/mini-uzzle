@@ -83,6 +83,10 @@ function estimateBounds(blocks: PlacedBlock[]) {
   }
 }
 
+function blockArea(block: PlacedBlock) {
+  return block.width * block.height
+}
+
 function buildCandidate(
   item: { id: string; color: PlacedBlock['color'] },
   orientation: 'horizontal' | 'vertical',
@@ -205,6 +209,63 @@ function balancedGrowthScore(base: ReturnType<typeof footprint>, next: ReturnTyp
   return totalGrowth * 0.05 - imbalance * 0.04
 }
 
+function averageNeighborCount(blocks: PlacedBlock[]) {
+  if (blocks.length === 0) {
+    return 0
+  }
+
+  const total = blocks.reduce((sum, block) => {
+    const neighbors = blocks.filter((other) => other.id !== block.id && touches(block, other)).length
+    return sum + neighbors
+  }, 0)
+
+  return total / blocks.length
+}
+
+function normalizedTargetScore(value: number, target: number) {
+  if (target === 0) {
+    return 0
+  }
+
+  return Math.max(0, 1 - Math.abs(value - target) / target)
+}
+
+function interestingnessScore(blocks: PlacedBlock[], stabilityMargin: number) {
+  if (blocks.length === 0) {
+    return Number.NEGATIVE_INFINITY
+  }
+
+  const normalized = normalizeBlocks(blocks)
+  const span = footprint(normalized)
+  const totalBlocks = normalized.length
+  const horizontalCount = normalized.filter((block) => block.orientation === 'horizontal').length
+  const verticalCount = totalBlocks - horizontalCount
+  const orientationBalance = 1 - Math.abs(horizontalCount - verticalCount) / totalBlocks
+  const totalArea = normalized.reduce((sum, block) => sum + blockArea(block), 0)
+  const footprintArea = Math.max(1, span.width * span.height)
+  const opennessRatio = Math.max(0, (footprintArea - totalArea) / footprintArea)
+  const openness = normalizedTargetScore(opennessRatio, 0.32)
+  const avgNeighbors = averageNeighborCount(normalized)
+  const contactRichness = normalizedTargetScore(avgNeighbors, 2.2)
+  const heightLevels = new Set(normalized.map((block) => block.y)).size
+  const levelVariety = Math.min(1, heightLevels / Math.max(3, Math.ceil(totalBlocks / 4)))
+  const xAnchors = new Set(normalized.map((block) => block.x)).size
+  const lateralVariety = Math.min(1, xAnchors / Math.max(4, Math.ceil(totalBlocks / 3)))
+  const aspectRatio = span.width / Math.max(1, span.height)
+  const shapeBalance = normalizedTargetScore(aspectRatio, 1.15)
+
+  return (
+    stabilityMargin * 0.18 +
+    orientationBalance * 1.15 +
+    openness * 0.95 +
+    contactRichness * 0.7 +
+    levelVariety * 0.85 +
+    lateralVariety * 0.75 +
+    shapeBalance * 0.55 +
+    totalBlocks * 0.015
+  )
+}
+
 function scoreCandidate(
   placed: PlacedBlock[],
   candidate: PlacedBlock,
@@ -263,14 +324,16 @@ export function generatePuzzle(config: GenerationConfig): {
 
   const firstItem = inventory[0]
   if (firstItem) {
+    const firstOrientation = random() < 0.5 ? 'horizontal' : 'vertical'
+    const firstShape = shapeFor(firstOrientation)
     placed.push({
       id: firstItem.id,
       color: firstItem.color,
-      orientation: 'horizontal',
-      x: -Math.floor(HORIZONTAL.width / 2),
+      orientation: firstOrientation,
+      x: -Math.floor(firstShape.width / 2),
       y: 0,
-      width: HORIZONTAL.width,
-      height: HORIZONTAL.height,
+      width: firstShape.width,
+      height: firstShape.height,
     })
   }
 
@@ -316,8 +379,7 @@ export function generatePuzzle(config: GenerationConfig): {
 
   const normalizedPlaced = normalizeBlocks(placed)
   const bounds = estimateBounds(normalizedPlaced)
-
-  const puzzle: PuzzleCard = {
+  const basePuzzle: PuzzleCard = {
     id: config.seed,
     name: `Card ${config.seed.toUpperCase()}`,
     seed: config.seed,
@@ -326,7 +388,13 @@ export function generatePuzzle(config: GenerationConfig): {
     maxHeight: bounds.maxHeight,
     blocks: normalizedPlaced.sort((left, right) => left.y - right.y || left.x - right.x),
   }
-  const validation = validatePuzzle(puzzle)
+  const validation = validatePuzzle(basePuzzle)
+  const puzzle: PuzzleCard = {
+    ...basePuzzle,
+    interestingness: validation.isValid
+      ? interestingnessScore(basePuzzle.blocks, validation.stabilityMargin)
+      : 0,
+  }
 
   return {
     puzzle,

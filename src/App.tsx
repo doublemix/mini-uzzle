@@ -9,6 +9,7 @@ function App() {
     seed,
     setCount,
     totalBlocks,
+    interestingness,
     stabilityMargin,
     validation,
     regenerate,
@@ -53,6 +54,10 @@ function App() {
             <div>
               <span>Stability margin</span>
               <strong>{stabilityMargin.toFixed(2)}</strong>
+            </div>
+            <div>
+              <span>Interestingness</span>
+              <strong>{interestingness.toFixed(2)}</strong>
             </div>
           </div>
         </header>

@@ -43,6 +43,7 @@ export interface PuzzleCard {
   setCount: number
   boardWidth: number
   maxHeight: number
+  interestingness?: number
   blocks: PlacedBlock[]
 }
 

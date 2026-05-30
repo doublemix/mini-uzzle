@@ -20,11 +20,11 @@ function App() {
     <main className="app-shell">
       <section className="hero-panel">
         <p className="eyebrow">Uzzle Stack Royale</p>
-        <h1>Generate stable puzzle cards on a half-tile grid.</h1>
+        <h1>Generate build pattern cards on a half-tile grid.</h1>
         <p className="hero-copy">
-          This first slice runs entirely in the browser: seeded generation,
-          recursive center-of-mass validation, and shareable challenges with no
-          server dependency.
+          Generate printable-style patterns for your physical block sets using
+          seeded layouts, scaled board bounds, and center-of-mass stability
+          checks.
         </p>
         <CardControls
           seed={seed}
@@ -62,11 +62,11 @@ function App() {
         <div className="validation-panel">
           <div>
             <p className="panel-label">Validation</p>
-            <h3>{validation.isValid ? 'Structurally valid' : 'Needs review'}</h3>
+            <h3>{validation.isValid ? 'Card is buildable' : 'Needs review'}</h3>
             <p>
               {validation.isValid
-                ? 'Every placed substructure keeps its combined center of mass inside its support span.'
-                : 'The generated shape violated one or more support or stability checks.'}
+                ? 'Every supported substructure keeps its combined center of mass inside a safe support span.'
+                : 'The generated pattern failed one or more support, contact, or stability checks.'}
             </p>
           </div>
           <ul>

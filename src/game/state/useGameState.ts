@@ -3,8 +3,17 @@ import { createSeedToken } from '../engine/seeding'
 import { localPuzzleProvider } from '../providers/puzzleProvider'
 
 const DEFAULT_SET_COUNT = 1
-const BOARD_WIDTH = 18
-const BOARD_HEIGHT = 20
+const BASE_BOARD_WIDTH = 18
+const BASE_BOARD_HEIGHT = 20
+const GROWTH_RATE_PER_SET = 6
+
+function getBoardSize(setCount: number) {
+  const growth = Math.max(0, setCount - 1)
+  return {
+    boardWidth: BASE_BOARD_WIDTH + growth * GROWTH_RATE_PER_SET,
+    maxHeight: BASE_BOARD_HEIGHT + growth * GROWTH_RATE_PER_SET,
+  }
+}
 
 function readUrlState() {
   const params = new URLSearchParams(window.location.search)
@@ -25,15 +34,16 @@ export function useGameState() {
   const initial = readUrlState()
   const [seed, setSeed] = useState(initial.seed)
   const [setCount, setSetCount] = useState(initial.setCount)
+  const board = useMemo(() => getBoardSize(setCount), [setCount])
   const puzzle = useMemo(
     () =>
       localPuzzleProvider.generate({
         seed,
         setCount,
-        boardWidth: BOARD_WIDTH,
-        maxHeight: BOARD_HEIGHT,
+        boardWidth: board.boardWidth,
+        maxHeight: board.maxHeight,
       }),
-    [seed, setCount],
+    [seed, setCount, board],
   )
   const validation = useMemo(
     () => localPuzzleProvider.validate(puzzle),

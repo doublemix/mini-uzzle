@@ -7,6 +7,8 @@ import type {
 } from '../types'
 import { contactContains, mergeLoad, supportMargin } from './stability'
 
+const MIN_STABILITY_MARGIN = 0.1
+
 function overlapRange(aStart: number, aEnd: number, bStart: number, bEnd: number) {
   const start = Math.max(aStart, bStart)
   const end = Math.min(aEnd, bEnd)
@@ -74,6 +76,27 @@ function hasCollision(blocks: PlacedBlock[]) {
   return null
 }
 
+function touches(a: PlacedBlock, b: PlacedBlock) {
+  const horizontalTouch =
+    (a.x + a.width === b.x || b.x + b.width === a.x) &&
+    overlapRange(a.y, a.y + a.height, b.y, b.y + b.height)
+  const verticalTouch =
+    (a.y + a.height === b.y || b.y + b.height === a.y) &&
+    overlapRange(a.x, a.x + a.width, b.x, b.x + b.width)
+
+  return Boolean(horizontalTouch || verticalTouch)
+}
+
+function findIsolatedBlocks(blocks: PlacedBlock[]) {
+  if (blocks.length <= 1) {
+    return []
+  }
+
+  return blocks.filter(
+    (block) => !blocks.some((other) => other.id !== block.id && touches(block, other)),
+  )
+}
+
 export function validatePuzzle(puzzle: PuzzleCard): ValidationResult {
   const notes: string[] = []
   const { blocks, boardWidth, maxHeight } = puzzle
@@ -98,6 +121,15 @@ export function validatePuzzle(puzzle: PuzzleCard): ValidationResult {
         notes: [`${block.id} exceeds the board height.`],
         stabilityMargin: -1,
       }
+    }
+  }
+
+  const isolatedBlocks = findIsolatedBlocks(blocks)
+  if (isolatedBlocks.length > 0) {
+    return {
+      isValid: false,
+      notes: [`${isolatedBlocks[0].id} is isolated. Every block must touch at least one other block.`],
+      stabilityMargin: -1,
     }
   }
 
@@ -133,6 +165,14 @@ export function validatePuzzle(puzzle: PuzzleCard): ValidationResult {
     }
 
     const margin = block.y === 0 ? block.width / 2 : supportMargin(contacts, projection)
+    if (block.y > 0 && margin < MIN_STABILITY_MARGIN) {
+      return {
+        isValid: false,
+        notes: [`${block.id} is too close to tipping at the edge of its support span.`],
+        stabilityMargin: margin,
+      }
+    }
+
     minimumMargin = Math.min(minimumMargin, margin)
 
     const supporterContacts = contacts.filter((contact) => contact.supporterId !== 'table')
@@ -161,6 +201,7 @@ export function validatePuzzle(puzzle: PuzzleCard): ValidationResult {
 
   notes.push(`Validated ${blocks.length} blocks with recursive center-of-mass checks.`)
   notes.push('Half-tile offsets are allowed only where the support span can carry the full assembly.')
+  notes.push(`Minimum supported stability margin is ${MIN_STABILITY_MARGIN.toFixed(1)} half-units.`)
 
   return {
     isValid: true,

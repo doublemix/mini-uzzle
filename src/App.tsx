@@ -29,7 +29,7 @@ function App() {
     <div className="page-root">
       <header className="topbar">
         <a className="brand" href="#/" aria-label="Home">
-          Uzzle Stack Royale
+          the Uzzle: Stack Royale
         </a>
         {isDev && route === 'debug' ? <span className="dev-badge">Debug Mode</span> : null}
       </header>

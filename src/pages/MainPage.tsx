@@ -45,62 +45,101 @@ export function MainPage() {
     regenerate,
     setSetCount,
   } = useGameState()
-  const [hasGenerated, setHasGenerated] = useState(false)
+  const [showCard, setShowCard] = useState(false)
+  const [spinTurns, setSpinTurns] = useState(0)
+  const [cardKey, setCardKey] = useState(0)
   const layout = useMemo(() => cardLayout(puzzle.blocks), [puzzle.blocks])
 
   const onSetChange = (value: number) => {
     setSetCount(value)
-    setHasGenerated(false)
+    setShowCard(false)
+    setSpinTurns(0)
+    setCardKey((key) => key + 1)
   }
 
   const onGenerate = () => {
     regenerate()
-    setHasGenerated(true)
+    if (showCard) {
+      setSpinTurns((turns) => turns + 1)
+      return
+    }
+
+    setShowCard(true)
+    setSpinTurns(0)
   }
 
-  return (
-    <main className="main-simple">
-      <section className="main-entry">
-        <h1>Uzzle Stack Royale Card Generator</h1>
-        <p>Choose your sets, then generate a build card for your physical blocks.</p>
-        <div className="main-actions">
-          <label>
-            <span>Number of sets</span>
-            <select
-              value={setCount}
-              onChange={(event) => onSetChange(Number(event.target.value))}
-            >
-              <option value={1}>1 set</option>
-              <option value={2}>2 sets</option>
-              <option value={3}>3 sets</option>
-              <option value={4}>4 sets</option>
-            </select>
-          </label>
-          <button type="button" onClick={onGenerate}>Generate Card</button>
-        </div>
-      </section>
+  const onBack = () => {
+    setShowCard(false)
+    setSpinTurns(0)
+    setCardKey((key) => key + 1)
+  }
 
-      <section className="card-stage" aria-label="Card preview">
-        <article className="pattern-card" role="img" aria-label={hasGenerated ? puzzle.name : 'No card generated yet'}>
-          {hasGenerated ? (
-            <div className="pattern-canvas">
-              {puzzle.blocks.map((block) => (
-                <div
-                  key={block.id}
-                  className={`pattern-block block-${block.color}`}
-                  style={{
-                    left: layout.offsetX + block.x * BLOCK_HALF_UNIT * layout.scale,
-                    bottom: layout.offsetY + block.y * BLOCK_HALF_UNIT * layout.scale,
-                    width: block.width * BLOCK_HALF_UNIT * layout.scale,
-                    height: block.height * BLOCK_HALF_UNIT * layout.scale,
-                  }}
-                />
-              ))}
+  const cardAngle = showCard ? 180 + spinTurns * 360 : 0
+
+  const cardFace = (
+    <div className="pattern-canvas">
+      {puzzle.blocks.map((block) => (
+        <div
+          key={block.id}
+          className={`pattern-block block-${block.color}`}
+          style={{
+            left: layout.offsetX + block.x * BLOCK_HALF_UNIT * layout.scale,
+            bottom: layout.offsetY + block.y * BLOCK_HALF_UNIT * layout.scale,
+            width: block.width * BLOCK_HALF_UNIT * layout.scale,
+            height: block.height * BLOCK_HALF_UNIT * layout.scale,
+          }}
+        />
+      ))}
+    </div>
+  )
+
+  return (
+    <main className="main-redesign">
+      <section className="main-center-stage">
+        {showCard ? (
+          <button type="button" className="back-button" onClick={onBack}>
+            ← Back
+          </button>
+        ) : (
+          <span className="back-button-spacer" aria-hidden="true" />
+        )}
+
+        <div className="flip-scene" key={cardKey}>
+          <article
+            className="flip-card"
+            style={{ transform: `rotateY(${cardAngle}deg)` }}
+            role="img"
+            aria-label={showCard ? puzzle.name : 'Generator setup card'}
+          >
+            <div className="flip-face flip-front">
+              {!showCard ? (
+                <div className="setup-panel">
+                  <h1>Card Setup</h1>
+                  <label>
+                    <span>Number of sets</span>
+                    <select
+                      value={setCount}
+                      onChange={(event) => onSetChange(Number(event.target.value))}
+                    >
+                      <option value={1}>1 set</option>
+                      <option value={2}>2 sets</option>
+                      <option value={3}>3 sets</option>
+                      <option value={4}>4 sets</option>
+                    </select>
+                  </label>
+                </div>
+              ) : (
+                cardFace
+              )}
             </div>
-          ) : (
-            <p className="empty-card-note">Generate a card to preview it here.</p>
-          )}
-        </article>
+
+            <div className="flip-face flip-back">{cardFace}</div>
+          </article>
+        </div>
+
+        <button type="button" className="generate-floating" onClick={onGenerate}>
+          Generate Card
+        </button>
       </section>
     </main>
   )

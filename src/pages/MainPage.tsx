@@ -4,6 +4,7 @@ import { BLOCK_HALF_UNIT } from '../game/types'
 
 const CARD_SIZE = 420
 const CARD_PADDING = 24
+const CARD_PADDING_RATIO = CARD_PADDING / CARD_SIZE
 const FLIP_MS = 560
 type Puzzle = ReturnType<typeof useGameState>['puzzle']
 type FaceContent =
@@ -14,10 +15,8 @@ function cardLayout(blocks: Puzzle['blocks']) {
   if (blocks.length === 0) {
     return {
       scale: 1,
-      offsetX: CARD_PADDING,
-      offsetY: CARD_PADDING,
-      width: 0,
-      height: 0,
+      offsetX: CARD_PADDING_RATIO,
+      offsetY: CARD_PADDING_RATIO,
     }
   }
 
@@ -27,17 +26,15 @@ function cardLayout(blocks: Puzzle['blocks']) {
   const maxY = Math.max(...blocks.map((block) => (block.y + block.height) * BLOCK_HALF_UNIT))
   const contentWidth = Math.max(1, maxX - minX)
   const contentHeight = Math.max(1, maxY - minY)
-  const available = CARD_SIZE - CARD_PADDING * 2
-  const scale = Math.min(available / contentWidth, available / contentHeight)
+  const availableRatio = 1 - CARD_PADDING_RATIO * 2
+  const scale = Math.min(availableRatio / contentWidth, availableRatio / contentHeight)
   const scaledWidth = contentWidth * scale
   const scaledHeight = contentHeight * scale
 
   return {
     scale,
-    width: contentWidth,
-    height: contentHeight,
-    offsetX: (CARD_SIZE - scaledWidth) / 2 - minX * scale,
-    offsetY: (CARD_SIZE - scaledHeight) / 2 - minY * scale,
+    offsetX: (1 - scaledWidth) / 2 - minX * scale,
+    offsetY: (1 - scaledHeight) / 2 - minY * scale,
   }
 }
 
@@ -51,10 +48,10 @@ function PatternFace({ puzzle }: { puzzle: Puzzle }) {
           key={block.id}
           className={`pattern-block block-${block.color}`}
           style={{
-            left: layout.offsetX + block.x * BLOCK_HALF_UNIT * layout.scale,
-            bottom: layout.offsetY + block.y * BLOCK_HALF_UNIT * layout.scale,
-            width: block.width * BLOCK_HALF_UNIT * layout.scale,
-            height: block.height * BLOCK_HALF_UNIT * layout.scale,
+            left: `${(layout.offsetX + block.x * BLOCK_HALF_UNIT * layout.scale) * 100}%`,
+            bottom: `${(layout.offsetY + block.y * BLOCK_HALF_UNIT * layout.scale) * 100}%`,
+            width: `${block.width * BLOCK_HALF_UNIT * layout.scale * 100}%`,
+            height: `${block.height * BLOCK_HALF_UNIT * layout.scale * 100}%`,
           }}
         />
       ))}
@@ -110,13 +107,19 @@ interface MainPageProps {
 
 export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
   const {
+    initialHasSeed,
     puzzle,
     setCount,
     regenerate,
     setSetCount,
+    clearShareableState,
   } = useGameState()
-  const [frontFace, setFrontFace] = useState<FaceContent>({ kind: 'setup' })
-  const [backFace, setBackFace] = useState<FaceContent>({ kind: 'puzzle', puzzle })
+  const [frontFace, setFrontFace] = useState<FaceContent>(() =>
+    initialHasSeed ? { kind: 'puzzle', puzzle } : { kind: 'setup' },
+  )
+  const [backFace, setBackFace] = useState<FaceContent>(() =>
+    initialHasSeed ? { kind: 'setup' } : { kind: 'puzzle', puzzle },
+  )
   const [showBack, setShowBack] = useState(false)
   const [isFlipping, setIsFlipping] = useState(false)
   const settleTimerRef = useRef<number | null>(null)
@@ -181,8 +184,9 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
   }, [regenerate, startFlipTo])
 
   const onBack = useCallback(() => {
+    clearShareableState()
     startFlipTo({ kind: 'setup' })
-  }, [startFlipTo])
+  }, [clearShareableState, startFlipTo])
 
   const cardAngle = showBack ? 180 : 0
   const visibleFace = showBack ? backFace : frontFace

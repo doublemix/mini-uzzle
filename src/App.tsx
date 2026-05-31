@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { DebugPage } from './pages/DebugPage'
 import { MainPage } from './pages/MainPage'
 import './App.css'
@@ -16,11 +16,11 @@ function App() {
     return initial === 'debug' && !isDev ? 'main' : initial
   })
   const [showMainBack, setShowMainBack] = useState(false)
-  const [mainBackHandler, setMainBackHandler] = useState<(() => void) | null>(null)
+  const mainBackHandlerRef = useRef<(() => void) | null>(null)
 
   const handleMainBackChange = useCallback((visible: boolean, handler: () => void) => {
+    mainBackHandlerRef.current = handler
     setShowMainBack(visible)
-    setMainBackHandler(() => handler)
   }, [])
 
   useEffect(() => {
@@ -36,9 +36,20 @@ function App() {
     <div className="page-root">
       <header className="topbar">
         <div className="topbar-slot topbar-slot-leading">
-          {route === 'main' && showMainBack && mainBackHandler ? (
-            <button type="button" className="appbar-back-button" onClick={mainBackHandler}>
-              ← Back
+          {route === 'main' && showMainBack ? (
+            <button
+              type="button"
+              className="appbar-back-button"
+              onClick={() => mainBackHandlerRef.current?.()}
+              aria-label="Go back"
+              title="Back"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path
+                  d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
+                  fill="currentColor"
+                />
+              </svg>
             </button>
           ) : null}
         </div>

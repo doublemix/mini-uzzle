@@ -10,10 +10,7 @@
 
   font: 16px/1.5 var(--sans);
   color: var(--text);
-  background:
-    radial-gradient(circle at top left, rgba(255, 220, 170, 0.7), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(208, 103, 49, 0.18), transparent 24%),
-    linear-gradient(180deg, #f6f1e7 0%, #efe4d6 100%);
+  background: #c8cdd7;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -27,6 +24,12 @@
 body {
   margin: 0;
   min-width: 320px;
+  overflow-x: hidden;
+}
+
+html,
+#root {
+  overflow-x: hidden;
 }
 
 button,

@@ -17,21 +17,39 @@ function getBoardSize(setCount: number) {
 
 function readUrlState() {
   const params = new URLSearchParams(window.location.search)
-  const seed = params.get('seed') || createSeedToken()
+  const urlSeed = params.get('seed')
+  const seed = urlSeed || createSeedToken()
   const setCount = Math.max(1, Math.min(4, Number(params.get('sets') || DEFAULT_SET_COUNT)))
+  const hasSeedInUrl = Boolean(urlSeed)
 
-  return { seed, setCount }
+  return { seed, setCount, hasSeedInUrl }
+}
+
+function replaceUrlParams(params: URLSearchParams) {
+  const nextQuery = params.toString()
+  const nextUrl = nextQuery
+    ? `${window.location.pathname}?${nextQuery}${window.location.hash}`
+    : `${window.location.pathname}${window.location.hash}`
+  window.history.replaceState({}, '', nextUrl)
 }
 
 function writeUrlState(seed: string, setCount: number) {
   const params = new URLSearchParams(window.location.search)
   params.set('seed', seed)
   params.set('sets', String(setCount))
-  window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
+  replaceUrlParams(params)
+}
+
+function clearUrlState() {
+  const params = new URLSearchParams(window.location.search)
+  params.delete('seed')
+  params.delete('sets')
+  replaceUrlParams(params)
 }
 
 export function useGameState() {
   const initial = readUrlState()
+  const [initialHasSeed] = useState(initial.hasSeedInUrl)
   const [seed, setSeed] = useState(initial.seed)
   const [setCount, setSetCount] = useState(initial.setCount)
   const board = useMemo(() => getBoardSize(setCount), [setCount])
@@ -73,7 +91,12 @@ export function useGameState() {
     return nextPuzzle
   }
 
+  const clearShareableState = () => {
+    clearUrlState()
+  }
+
   return {
+    initialHasSeed,
     seed,
     setSeed: setShareableSeed,
     setCount,
@@ -84,5 +107,6 @@ export function useGameState() {
     interestingness: puzzle.interestingness ?? 0,
     stabilityMargin: validation.stabilityMargin,
     regenerate,
+    clearShareableState,
   }
 }

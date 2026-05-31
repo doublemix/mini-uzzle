@@ -10,34 +10,28 @@ function readRoute(): Route {
 }
 
 function App() {
-  const [route, setRoute] = useState<Route>(() => readRoute())
+  const isDev = import.meta.env.DEV
+  const [route, setRoute] = useState<Route>(() => {
+    const initial = readRoute()
+    return initial === 'debug' && !isDev ? 'main' : initial
+  })
 
   useEffect(() => {
-    const onHashChange = () => setRoute(readRoute())
+    const onHashChange = () => {
+      const next = readRoute()
+      setRoute(next === 'debug' && !isDev ? 'main' : next)
+    }
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
-  }, [])
+  }, [isDev])
 
   return (
     <div className="page-root">
       <header className="topbar">
-        <a className="brand" href="#/">
+        <a className="brand" href="#/" aria-label="Home">
           Uzzle Stack Royale
         </a>
-        <nav className="topnav" aria-label="Page mode">
-          <a
-            href="#/"
-            className={route === 'main' ? 'nav-link active' : 'nav-link'}
-          >
-            Card Generator
-          </a>
-          <a
-            href="#/debug"
-            className={route === 'debug' ? 'nav-link active' : 'nav-link'}
-          >
-            Debug Lab
-          </a>
-        </nav>
+        {isDev && route === 'debug' ? <span className="dev-badge">Debug Mode</span> : null}
       </header>
 
       {route === 'debug' ? <DebugPage /> : <MainPage />}

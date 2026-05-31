@@ -31,10 +31,8 @@ npm run build
 The repository is configured for GitHub Pages deployment from GitHub Actions.
 
 - CI runs on pushes and pull requests.
-- Pages deploy runs on pushes to `main`.
+- Pages deploy runs on pushes to `master`.
 - The production build uses `/mini-uzzle/` as the base path when `GITHUB_PAGES=true` is set in CI.
-
-If your default branch is `master`, change the branch filters in the workflow files before enabling Pages.
 
 ## Next implementation targets
 

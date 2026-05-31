@@ -1,27 +1,51 @@
 .page-root {
   min-height: 100svh;
-  padding: 20px;
+  padding: 0;
   display: grid;
   gap: 16px;
   background: #c8cdd7;
 }
 
 .topbar {
-  display: flex;
-  justify-content: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(112px, 1fr) auto minmax(112px, 1fr);
   align-items: center;
-  gap: 16px;
-  padding: 14px 18px;
-  border: 1px solid rgba(37, 44, 56, 0.24);
-  border-radius: 14px;
-  background: #b8bfcb;
+  min-height: 64px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(37, 44, 56, 0.16);
+  background: rgba(232, 236, 243, 0.92);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.28), 0 3px 10px rgba(31, 38, 49, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.topbar-slot {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.topbar-slot-leading {
+  justify-content: flex-start;
+}
+
+.topbar-slot-center {
+  justify-content: center;
+}
+
+.topbar-slot-trailing {
+  justify-content: flex-end;
 }
 
 .brand {
   color: var(--text-h);
   text-decoration: none;
   font-weight: 700;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .dev-badge {
@@ -53,6 +77,26 @@
   border-color: transparent;
 }
 
+.appbar-back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  border: 0;
+  background: transparent;
+  color: #1b2430;
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 8px 10px;
+  margin-left: -10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.appbar-back-button:hover,
+.appbar-back-button:focus-visible {
+  background: rgba(20, 28, 40, 0.08);
+}
+
 .main-layout {
   display: grid;
   grid-template-columns: minmax(320px, 440px) minmax(0, 1fr);
@@ -66,9 +110,10 @@
 }
 
 .main-redesign {
-  min-height: calc(100svh - 140px);
+  min-height: calc(100svh - 80px);
   display: grid;
   place-items: center;
+  padding: 16px 20px 20px;
 }
 
 .main-center-stage {
@@ -77,32 +122,9 @@
   gap: 12px;
 }
 
-.back-button,
-.back-button-spacer {
-  min-height: 28px;
-  align-self: start;
-}
-
-.back-button {
-  border: 1px solid transparent;
-  background: transparent;
-  color: #181818;
-  font: inherit;
-  font-size: 0.95rem;
-  padding: 4px 2px;
-  cursor: pointer;
-}
-
-.back-button:hover,
-.back-button:focus-visible {
-  border-color: rgba(24, 24, 24, 0.25);
-  border-radius: 6px;
-}
-
 .flip-scene {
   width: min(76vw, 460px);
   aspect-ratio: 1 / 1;
-  perspective: 1500px;
 }
 
 .flip-card {
@@ -468,13 +490,9 @@
 }
 
 @media (max-width: 1100px) {
-  .page-root {
-    padding: 14px;
-  }
-
   .topbar {
-    flex-direction: column;
-    align-items: center;
+    grid-template-columns: minmax(88px, 1fr) auto minmax(88px, 1fr);
+    padding: 0 12px;
   }
 
   .main-layout {
@@ -517,5 +535,21 @@
     width: 100% !important;
     max-width: 100%;
     height: min(72svh, 720px) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell,
+  .debug-layout {
+    display: grid;
+    gap: 16px;
+  }
+
+  .workspace-panel {
+    padding: 20px;
+  }
+
+  .brand {
+    font-size: 0.96rem;
   }
 }

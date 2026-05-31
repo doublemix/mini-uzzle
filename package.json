@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start": "vite --host 0.0.0.0",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "build": "tsc -b && vite build",

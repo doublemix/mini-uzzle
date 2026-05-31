@@ -62,8 +62,15 @@ export function useGameState() {
 
   const regenerate = () => {
     const nextSeed = createSeedToken()
+    const nextPuzzle = localPuzzleProvider.generate({
+      seed: nextSeed,
+      setCount,
+      boardWidth: board.boardWidth,
+      maxHeight: board.maxHeight,
+    })
     writeUrlState(nextSeed, setCount)
     setSeed(nextSeed)
+    return nextPuzzle
   }
 
   return {

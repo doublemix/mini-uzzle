@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { DebugPage } from './pages/DebugPage'
 import { MainPage } from './pages/MainPage'
 import './App.css'
@@ -15,6 +15,13 @@ function App() {
     const initial = readRoute()
     return initial === 'debug' && !isDev ? 'main' : initial
   })
+  const [showMainBack, setShowMainBack] = useState(false)
+  const [mainBackHandler, setMainBackHandler] = useState<(() => void) | null>(null)
+
+  const handleMainBackChange = useCallback((visible: boolean, handler: () => void) => {
+    setShowMainBack(visible)
+    setMainBackHandler(() => handler)
+  }, [])
 
   useEffect(() => {
     const onHashChange = () => {
@@ -28,13 +35,30 @@ function App() {
   return (
     <div className="page-root">
       <header className="topbar">
-        <a className="brand" href="#/" aria-label="Home">
-          the Uzzle: Stack Royale
-        </a>
-        {isDev && route === 'debug' ? <span className="dev-badge">Debug Mode</span> : null}
+        <div className="topbar-slot topbar-slot-leading">
+          {route === 'main' && showMainBack && mainBackHandler ? (
+            <button type="button" className="appbar-back-button" onClick={mainBackHandler}>
+              ← Back
+            </button>
+          ) : null}
+        </div>
+
+        <div className="topbar-slot topbar-slot-center">
+          <a className="brand" href="#/" aria-label="Home">
+            the Uzzle: Stack Royale
+          </a>
+        </div>
+
+        <div className="topbar-slot topbar-slot-trailing">
+          {isDev && route === 'debug' ? <span className="dev-badge">Debug Mode</span> : null}
+        </div>
       </header>
 
-      {route === 'debug' ? <DebugPage /> : <MainPage />}
+      {route === 'debug' ? (
+        <DebugPage />
+      ) : (
+        <MainPage onBackAvailabilityChange={handleMainBackChange} />
+      )}
     </div>
   )
 }

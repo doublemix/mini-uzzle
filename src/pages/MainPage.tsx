@@ -288,28 +288,28 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
       return
     }
     const puzzleToToggle = visibleFace.puzzle
+
+    // Capture favorite state BEFORE toggling so we can react to removal correctly.
+    const wasFavorited = isFavorited(puzzleToToggle.id)
     toggleFavorite(puzzleToToggle)
 
-    if (!isBrowsingFavorites) {
+    if (!isBrowsingFavorites || !wasFavorited) {
       return
     }
 
-    // After toggling in browse mode, the list has changed. Re-read from storage after state update.
-    // We detect removal by checking isFavorited before the toggle.
-    const wasFavorited = isFavorited(puzzleToToggle.id)
-    if (wasFavorited) {
-      // Card was just removed from favorites. Adjust navigation.
-      const listAfterRemoval = favorites.filter((c) => c.id !== puzzleToToggle.id)
-      if (listAfterRemoval.length === 0) {
-        // No more favorites — exit browsing mode.
-        setIsBrowsingFavorites(false)
-        startFlipTo({ kind: 'setup' })
-        return
-      }
-      const nextIndex = Math.min(favoritesIndex, listAfterRemoval.length - 1)
-      setFavoritesIndex(nextIndex)
-      startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(listAfterRemoval[nextIndex]!) })
+    // Card was just removed from favorites while browsing. Adjust navigation.
+    // `favorites` is the pre-toggle list, so filtering out the removed card gives us
+    // the expected post-toggle list without waiting for a state re-render.
+    const listAfterRemoval = favorites.filter((c) => c.id !== puzzleToToggle.id)
+    if (listAfterRemoval.length === 0) {
+      // No more favorites — exit browsing mode.
+      setIsBrowsingFavorites(false)
+      startFlipTo({ kind: 'setup' })
+      return
     }
+    const nextIndex = Math.min(favoritesIndex, listAfterRemoval.length - 1)
+    setFavoritesIndex(nextIndex)
+    startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(listAfterRemoval[nextIndex]!) })
   }, [
     showBack,
     backFace,

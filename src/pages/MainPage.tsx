@@ -187,6 +187,7 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
   const [showBack, setShowBack] = useState(false)
   const [isFlipping, setIsFlipping] = useState(false)
   const settleTimerRef = useRef<number | null>(null)
+  const pendingFaceRef = useRef<FaceContent | null>(null)
 
   useEffect(() => {
     return () => {
@@ -203,6 +204,7 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
       settleTimerRef.current = null
     }
 
+    pendingFaceRef.current = null
     setShowBack(false)
     setIsFlipping(false)
     setFrontFace({ kind: 'setup' })
@@ -210,15 +212,51 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
     setIsBrowsingFavorites(false)
   }, [puzzle, setSetCount])
 
+  const showBackRef = useRef(showBack)
+  showBackRef.current = showBack
+
   const startFlipTo = useCallback((target: FaceContent) => {
     if (isFlipping) {
+      // Queue the latest target; previous pending (if any) is discarded.
+      pendingFaceRef.current = target
       return
     }
 
     setIsFlipping(true)
+    pendingFaceRef.current = null
 
     if (settleTimerRef.current !== null) {
       window.clearTimeout(settleTimerRef.current)
+    }
+
+    const afterFlip = () => {
+      settleTimerRef.current = null
+      const next = pendingFaceRef.current
+      pendingFaceRef.current = null
+      if (next !== null) {
+        // Start the queued flip immediately after this one settles.
+        setIsFlipping(true)
+        const nowShowBack = showBackRef.current
+        if (nowShowBack) {
+          setFrontFace(next)
+          setShowBack(false)
+          settleTimerRef.current = window.setTimeout(() => {
+            setBackFace(next)
+            setIsFlipping(false)
+            settleTimerRef.current = null
+          }, FLIP_MS)
+        } else {
+          setBackFace(next)
+          setShowBack(true)
+          settleTimerRef.current = window.setTimeout(() => {
+            setFrontFace(next)
+            setIsFlipping(false)
+            settleTimerRef.current = null
+          }, FLIP_MS)
+        }
+      } else {
+        setIsFlipping(false)
+      }
     }
 
     if (showBack) {
@@ -227,8 +265,7 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
       setShowBack(false)
       settleTimerRef.current = window.setTimeout(() => {
         setBackFace(target)
-        setIsFlipping(false)
-        settleTimerRef.current = null
+        afterFlip()
       }, FLIP_MS)
       return
     }
@@ -238,8 +275,7 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
     setShowBack(true)
     settleTimerRef.current = window.setTimeout(() => {
       setFrontFace(target)
-      setIsFlipping(false)
-      settleTimerRef.current = null
+      afterFlip()
     }, FLIP_MS)
   }, [isFlipping, showBack])
 

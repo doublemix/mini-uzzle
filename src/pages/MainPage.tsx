@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFavorites } from '../game/favorites/useFavorites'
 import { useGameState } from '../game/state/useGameState'
+import type { FavoriteCard } from '../game/favorites/useFavorites'
 import { BLOCK_HALF_UNIT } from '../game/types'
 
 const CARD_SIZE = 420
 const CARD_PADDING = 24
 const CARD_PADDING_RATIO = CARD_PADDING / CARD_SIZE
 const FLIP_MS = 560
+const FAVORITE_UI_AUTOHIDE_MS = 2800
 type Puzzle = ReturnType<typeof useGameState>['puzzle']
 type FaceContent =
   | { kind: 'setup' }
   | { kind: 'puzzle'; puzzle: Puzzle }
+type FlipDirection = 'forward' | 'backward'
+type PendingFlip = { target: FaceContent; direction: FlipDirection }
 
 function cardLayout(blocks: Puzzle['blocks']) {
   if (blocks.length === 0) {
@@ -43,19 +47,26 @@ function PatternFace({
   puzzle,
   isFavorited,
   onToggleFavorite,
+  showFavoriteButton,
+  onCanvasTap,
 }: {
   puzzle: Puzzle
   isFavorited: boolean
   onToggleFavorite: () => void
+  showFavoriteButton: boolean
+  onCanvasTap: () => void
 }) {
   const layout = useMemo(() => cardLayout(puzzle.blocks), [puzzle.blocks])
 
   return (
-    <div className="pattern-canvas">
+    <div className="pattern-canvas" onClick={onCanvasTap}>
       <button
         type="button"
-        className={`favorite-btn${isFavorited ? ' favorite-btn--active' : ''}`}
-        onClick={onToggleFavorite}
+        className={`favorite-btn${isFavorited ? ' favorite-btn--active' : ''}${showFavoriteButton ? ' favorite-btn--revealed' : ''}`}
+        onClick={(event) => {
+          event.stopPropagation()
+          onToggleFavorite()
+        }}
         aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
         title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
       >
@@ -131,6 +142,8 @@ function Face({
   onBrowseFavorites,
   isFavorited,
   onToggleFavorite,
+  showFavoriteButton,
+  onPatternTap,
 }: {
   content: FaceContent
   setCount: number
@@ -139,6 +152,8 @@ function Face({
   onBrowseFavorites: () => void
   isFavorited: boolean
   onToggleFavorite: () => void
+  showFavoriteButton: boolean
+  onPatternTap: () => void
 }) {
   if (content.kind === 'setup') {
     return (
@@ -156,6 +171,8 @@ function Face({
       puzzle={content.puzzle}
       isFavorited={isFavorited}
       onToggleFavorite={onToggleFavorite}
+      showFavoriteButton={showFavoriteButton}
+      onCanvasTap={onPatternTap}
     />
   )
 }
@@ -176,7 +193,10 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
   const { favorites, isFavorited, toggleFavorite, restoreFromFavorite } = useFavorites()
 
   const [isBrowsingFavorites, setIsBrowsingFavorites] = useState(false)
+  const [favoritesSnapshot, setFavoritesSnapshot] = useState<FavoriteCard[]>([])
   const [favoritesIndex, setFavoritesIndex] = useState(0)
+  const [isTouchRevealMode, setIsTouchRevealMode] = useState(false)
+  const [showFavoriteButton, setShowFavoriteButton] = useState(false)
 
   const [frontFace, setFrontFace] = useState<FaceContent>(() =>
     initialHasSeed ? { kind: 'puzzle', puzzle } : { kind: 'setup' },
@@ -185,14 +205,57 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
     initialHasSeed ? { kind: 'setup' } : { kind: 'puzzle', puzzle },
   )
   const [showBack, setShowBack] = useState(false)
+  const [rotationY, setRotationY] = useState(0)
   const [isFlipping, setIsFlipping] = useState(false)
   const settleTimerRef = useRef<number | null>(null)
-  const pendingFaceRef = useRef<FaceContent | null>(null)
+  const favoriteUiTimerRef = useRef<number | null>(null)
+  const pendingFlipRef = useRef<PendingFlip | null>(null)
+  const showBackRef = useRef(showBack)
+
+  useEffect(() => {
+    showBackRef.current = showBack
+  }, [showBack])
+
+  useEffect(() => {
+    const media = window.matchMedia('(hover: none), (pointer: coarse)')
+    const syncMode = () => {
+      const isTouch = media.matches
+      setIsTouchRevealMode(isTouch)
+      setShowFavoriteButton((visible) => (isTouch ? visible : false))
+    }
+
+    syncMode()
+    media.addEventListener('change', syncMode)
+    return () => {
+      media.removeEventListener('change', syncMode)
+    }
+  }, [])
+
+  const stopFavoriteUiTimer = useCallback(() => {
+    if (favoriteUiTimerRef.current !== null) {
+      window.clearTimeout(favoriteUiTimerRef.current)
+      favoriteUiTimerRef.current = null
+    }
+  }, [])
+
+  const scheduleFavoriteUiAutohide = useCallback(() => {
+    if (!isTouchRevealMode) {
+      return
+    }
+    stopFavoriteUiTimer()
+    favoriteUiTimerRef.current = window.setTimeout(() => {
+      setShowFavoriteButton(false)
+      favoriteUiTimerRef.current = null
+    }, FAVORITE_UI_AUTOHIDE_MS)
+  }, [isTouchRevealMode, stopFavoriteUiTimer])
 
   useEffect(() => {
     return () => {
       if (settleTimerRef.current !== null) {
         window.clearTimeout(settleTimerRef.current)
+      }
+      if (favoriteUiTimerRef.current !== null) {
+        window.clearTimeout(favoriteUiTimerRef.current)
       }
     }
   }, [])
@@ -204,39 +267,41 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
       settleTimerRef.current = null
     }
 
-    pendingFaceRef.current = null
+    pendingFlipRef.current = null
+    stopFavoriteUiTimer()
+    setShowFavoriteButton(false)
     setShowBack(false)
+    setRotationY(0)
     setIsFlipping(false)
     setFrontFace({ kind: 'setup' })
     setBackFace({ kind: 'puzzle', puzzle })
     setIsBrowsingFavorites(false)
-  }, [puzzle, setSetCount])
+  }, [puzzle, setSetCount, stopFavoriteUiTimer])
 
-  const showBackRef = useRef(showBack)
-  showBackRef.current = showBack
-
-  const startFlipTo = useCallback((target: FaceContent) => {
+  const startFlipTo = useCallback((target: FaceContent, direction: FlipDirection = 'forward') => {
     if (isFlipping) {
       // Queue the latest target; previous pending (if any) is discarded.
-      pendingFaceRef.current = target
+      pendingFlipRef.current = { target, direction }
       return
     }
 
     setIsFlipping(true)
-    pendingFaceRef.current = null
+    pendingFlipRef.current = null
 
     if (settleTimerRef.current !== null) {
       window.clearTimeout(settleTimerRef.current)
     }
 
-    const doFlip = (face: FaceContent, currentShowBack: boolean) => {
+    const doFlip = (face: FaceContent, currentShowBack: boolean, currentDirection: FlipDirection) => {
+      const nextRotationDelta = currentDirection === 'backward' ? -180 : 180
+
       const afterFlip = () => {
         settleTimerRef.current = null
-        const next = pendingFaceRef.current
-        pendingFaceRef.current = null
+        const next = pendingFlipRef.current
+        pendingFlipRef.current = null
         if (next !== null) {
           // Start the queued flip immediately after this one settles.
-          doFlip(next, showBackRef.current)
+          doFlip(next.target, showBackRef.current, next.direction)
         } else {
           setIsFlipping(false)
         }
@@ -246,6 +311,7 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
         // Back is currently visible, so stage target on front then flip to front.
         setFrontFace(face)
         setShowBack(false)
+        setRotationY((value) => value + nextRotationDelta)
         settleTimerRef.current = window.setTimeout(() => {
           setBackFace(face)
           afterFlip()
@@ -254,6 +320,7 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
         // Front is currently visible, so stage target on back then flip to back.
         setBackFace(face)
         setShowBack(true)
+        setRotationY((value) => value + nextRotationDelta)
         settleTimerRef.current = window.setTimeout(() => {
           setFrontFace(face)
           afterFlip()
@@ -261,90 +328,96 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
       }
     }
 
-    doFlip(target, showBack)
+    doFlip(target, showBack, direction)
   }, [isFlipping, showBack])
 
   const onGenerate = useCallback(() => {
     const nextPuzzle = regenerate()
-    startFlipTo({ kind: 'puzzle', puzzle: nextPuzzle })
+    startFlipTo({ kind: 'puzzle', puzzle: nextPuzzle }, 'forward')
   }, [regenerate, startFlipTo])
 
   const onBack = useCallback(() => {
     clearShareableState()
     setIsBrowsingFavorites(false)
-    startFlipTo({ kind: 'setup' })
-  }, [clearShareableState, startFlipTo])
+    setFavoritesSnapshot([])
+    stopFavoriteUiTimer()
+    setShowFavoriteButton(false)
+    startFlipTo({ kind: 'setup' }, 'backward')
+  }, [clearShareableState, startFlipTo, stopFavoriteUiTimer])
 
   const onBrowseFavorites = useCallback(() => {
     if (favorites.length === 0) {
       return
     }
+    const snapshot = [...favorites]
+    setFavoritesSnapshot(snapshot)
     setIsBrowsingFavorites(true)
     setFavoritesIndex(0)
-    startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(favorites[0]!) })
+    startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(snapshot[0]!) }, 'forward')
   }, [favorites, restoreFromFavorite, startFlipTo])
+
+  const activeFavorites = isBrowsingFavorites ? favoritesSnapshot : favorites
 
   const onFavoritesPrev = useCallback(() => {
     const nextIndex = favoritesIndex - 1
-    if (nextIndex < 0 || nextIndex >= favorites.length) {
+    if (nextIndex < 0 || nextIndex >= activeFavorites.length) {
       return
     }
     setFavoritesIndex(nextIndex)
-    startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(favorites[nextIndex]!) })
-  }, [favoritesIndex, favorites, restoreFromFavorite, startFlipTo])
+    startFlipTo(
+      { kind: 'puzzle', puzzle: restoreFromFavorite(activeFavorites[nextIndex]!) },
+      'backward',
+    )
+  }, [activeFavorites, favoritesIndex, restoreFromFavorite, startFlipTo])
 
   const onFavoritesNext = useCallback(() => {
     const nextIndex = favoritesIndex + 1
-    if (nextIndex >= favorites.length) {
+    if (nextIndex >= activeFavorites.length) {
       return
     }
     setFavoritesIndex(nextIndex)
-    startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(favorites[nextIndex]!) })
-  }, [favoritesIndex, favorites, restoreFromFavorite, startFlipTo])
+    startFlipTo(
+      { kind: 'puzzle', puzzle: restoreFromFavorite(activeFavorites[nextIndex]!) },
+      'forward',
+    )
+  }, [activeFavorites, favoritesIndex, restoreFromFavorite, startFlipTo])
 
-  // When browsing favorites and the current card is removed, navigate to adjacent or exit.
+  // In favorites browsing mode, keep browsing order stable via snapshot even if items are unfavorited.
   const onToggleCurrentFavorite = useCallback(() => {
     const visibleFace = showBack ? backFace : frontFace
     if (visibleFace.kind !== 'puzzle') {
       return
     }
-    const puzzleToToggle = visibleFace.puzzle
-
-    // Capture favorite state BEFORE toggling so we can react to removal correctly.
-    const wasFavorited = isFavorited(puzzleToToggle.id)
-    toggleFavorite(puzzleToToggle)
-
-    if (!isBrowsingFavorites || !wasFavorited) {
-      return
+    toggleFavorite(visibleFace.puzzle)
+    if (isTouchRevealMode) {
+      scheduleFavoriteUiAutohide()
     }
-
-    // Card was just removed from favorites while browsing. Adjust navigation.
-    // `favorites` is the pre-toggle list, so filtering out the removed card gives us
-    // the expected post-toggle list without waiting for a state re-render.
-    const listAfterRemoval = favorites.filter((c) => c.id !== puzzleToToggle.id)
-    if (listAfterRemoval.length === 0) {
-      // No more favorites — exit browsing mode.
-      setIsBrowsingFavorites(false)
-      startFlipTo({ kind: 'setup' })
-      return
-    }
-    const nextIndex = Math.min(favoritesIndex, listAfterRemoval.length - 1)
-    setFavoritesIndex(nextIndex)
-    startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(listAfterRemoval[nextIndex]!) })
   }, [
-    showBack,
     backFace,
     frontFace,
-    isBrowsingFavorites,
+    isTouchRevealMode,
+    scheduleFavoriteUiAutohide,
+    showBack,
     toggleFavorite,
-    isFavorited,
-    favorites,
-    favoritesIndex,
-    startFlipTo,
-    restoreFromFavorite,
   ])
 
-  const cardAngle = showBack ? 180 : 0
+  const onPatternTap = useCallback(() => {
+    if (!isTouchRevealMode) {
+      return
+    }
+
+    setShowFavoriteButton((visible) => {
+      const nextVisible = !visible
+      if (nextVisible) {
+        scheduleFavoriteUiAutohide()
+      } else {
+        stopFavoriteUiTimer()
+      }
+      return nextVisible
+    })
+  }, [isTouchRevealMode, scheduleFavoriteUiAutohide, stopFavoriteUiTimer])
+
+  const cardAngle = rotationY
   const visibleFace = showBack ? backFace : frontFace
   const showBackButton = visibleFace.kind === 'puzzle'
   const ariaLabel = visibleFace.kind === 'puzzle'
@@ -354,9 +427,9 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
   const visiblePuzzleId = visibleFace.kind === 'puzzle' ? visibleFace.puzzle.id : null
   const isCurrentFavorited = visiblePuzzleId ? isFavorited(visiblePuzzleId) : false
 
-  // Keep favoritesIndex in bounds if the list shrank (e.g. from another tab).
-  const clampedFavoritesIndex = favorites.length > 0
-    ? Math.min(favoritesIndex, favorites.length - 1)
+  // Keep favoritesIndex in bounds for current browsing list.
+  const clampedFavoritesIndex = activeFavorites.length > 0
+    ? Math.min(favoritesIndex, activeFavorites.length - 1)
     : 0
 
   useEffect(() => {
@@ -370,6 +443,8 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
     onBrowseFavorites,
     isFavorited: isCurrentFavorited,
     onToggleFavorite: onToggleCurrentFavorite,
+    showFavoriteButton,
+    onPatternTap,
   }
 
   return (
@@ -392,7 +467,7 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
           </article>
         </div>
 
-        {isBrowsingFavorites && favorites.length > 0 ? (
+        {isBrowsingFavorites && activeFavorites.length > 0 ? (
           <div className="favorites-nav">
             <button
               type="button"
@@ -407,13 +482,13 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
               </svg>
             </button>
             <span className="favorites-nav-count">
-              {clampedFavoritesIndex + 1} / {favorites.length}
+              {clampedFavoritesIndex + 1} / {activeFavorites.length}
             </span>
             <button
               type="button"
               className="favorites-nav-btn"
               onClick={onFavoritesNext}
-              disabled={clampedFavoritesIndex === favorites.length - 1}
+              disabled={clampedFavoritesIndex === activeFavorites.length - 1}
               aria-label="Next favorite"
               title="Next"
             >

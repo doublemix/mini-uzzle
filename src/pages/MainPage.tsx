@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useFavorites } from '../game/favorites/useFavorites'
 import { useGameState } from '../game/state/useGameState'
 import { BLOCK_HALF_UNIT } from '../game/types'
 
@@ -38,11 +39,33 @@ function cardLayout(blocks: Puzzle['blocks']) {
   }
 }
 
-function PatternFace({ puzzle }: { puzzle: Puzzle }) {
+function PatternFace({
+  puzzle,
+  isFavorited,
+  onToggleFavorite,
+}: {
+  puzzle: Puzzle
+  isFavorited: boolean
+  onToggleFavorite: () => void
+}) {
   const layout = useMemo(() => cardLayout(puzzle.blocks), [puzzle.blocks])
 
   return (
     <div className="pattern-canvas">
+      <button
+        type="button"
+        className={`favorite-btn${isFavorited ? ' favorite-btn--active' : ''}`}
+        onClick={onToggleFavorite}
+        aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+        title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path
+            d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
       {puzzle.blocks.map((block) => (
         <div
           key={block.id}
@@ -62,9 +85,13 @@ function PatternFace({ puzzle }: { puzzle: Puzzle }) {
 function SetupFace({
   setCount,
   onSetChange,
+  favoritesCount,
+  onBrowseFavorites,
 }: {
   setCount: number
   onSetChange: (value: number) => void
+  favoritesCount: number
+  onBrowseFavorites: () => void
 }) {
   return (
     <div className="setup-panel">
@@ -81,6 +108,17 @@ function SetupFace({
           <option value={4}>4 sets</option>
         </select>
       </label>
+      {favoritesCount > 0 && (
+        <button type="button" className="browse-favorites-btn" onClick={onBrowseFavorites}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+              fill="currentColor"
+            />
+          </svg>
+          Browse Favorites ({favoritesCount})
+        </button>
+      )}
     </div>
   )
 }
@@ -89,16 +127,37 @@ function Face({
   content,
   setCount,
   onSetChange,
+  favoritesCount,
+  onBrowseFavorites,
+  isFavorited,
+  onToggleFavorite,
 }: {
   content: FaceContent
   setCount: number
   onSetChange: (value: number) => void
+  favoritesCount: number
+  onBrowseFavorites: () => void
+  isFavorited: boolean
+  onToggleFavorite: () => void
 }) {
   if (content.kind === 'setup') {
-    return <SetupFace setCount={setCount} onSetChange={onSetChange} />
+    return (
+      <SetupFace
+        setCount={setCount}
+        onSetChange={onSetChange}
+        favoritesCount={favoritesCount}
+        onBrowseFavorites={onBrowseFavorites}
+      />
+    )
   }
 
-  return <PatternFace puzzle={content.puzzle} />
+  return (
+    <PatternFace
+      puzzle={content.puzzle}
+      isFavorited={isFavorited}
+      onToggleFavorite={onToggleFavorite}
+    />
+  )
 }
 
 interface MainPageProps {
@@ -114,6 +173,11 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
     setSetCount,
     clearShareableState,
   } = useGameState()
+  const { favorites, isFavorited, toggleFavorite, restoreFromFavorite } = useFavorites()
+
+  const [isBrowsingFavorites, setIsBrowsingFavorites] = useState(false)
+  const [favoritesIndex, setFavoritesIndex] = useState(0)
+
   const [frontFace, setFrontFace] = useState<FaceContent>(() =>
     initialHasSeed ? { kind: 'puzzle', puzzle } : { kind: 'setup' },
   )
@@ -143,6 +207,7 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
     setIsFlipping(false)
     setFrontFace({ kind: 'setup' })
     setBackFace({ kind: 'puzzle', puzzle })
+    setIsBrowsingFavorites(false)
   }, [puzzle, setSetCount])
 
   const startFlipTo = useCallback((target: FaceContent) => {
@@ -185,8 +250,78 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
 
   const onBack = useCallback(() => {
     clearShareableState()
+    setIsBrowsingFavorites(false)
     startFlipTo({ kind: 'setup' })
   }, [clearShareableState, startFlipTo])
+
+  const onBrowseFavorites = useCallback(() => {
+    if (favorites.length === 0) {
+      return
+    }
+    setIsBrowsingFavorites(true)
+    setFavoritesIndex(0)
+    startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(favorites[0]!) })
+  }, [favorites, restoreFromFavorite, startFlipTo])
+
+  const onFavoritesPrev = useCallback(() => {
+    const nextIndex = favoritesIndex - 1
+    if (nextIndex < 0 || nextIndex >= favorites.length) {
+      return
+    }
+    setFavoritesIndex(nextIndex)
+    startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(favorites[nextIndex]!) })
+  }, [favoritesIndex, favorites, restoreFromFavorite, startFlipTo])
+
+  const onFavoritesNext = useCallback(() => {
+    const nextIndex = favoritesIndex + 1
+    if (nextIndex >= favorites.length) {
+      return
+    }
+    setFavoritesIndex(nextIndex)
+    startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(favorites[nextIndex]!) })
+  }, [favoritesIndex, favorites, restoreFromFavorite, startFlipTo])
+
+  // When browsing favorites and the current card is removed, navigate to adjacent or exit.
+  const onToggleCurrentFavorite = useCallback(() => {
+    const visibleFace = showBack ? backFace : frontFace
+    if (visibleFace.kind !== 'puzzle') {
+      return
+    }
+    const puzzleToToggle = visibleFace.puzzle
+
+    // Capture favorite state BEFORE toggling so we can react to removal correctly.
+    const wasFavorited = isFavorited(puzzleToToggle.id)
+    toggleFavorite(puzzleToToggle)
+
+    if (!isBrowsingFavorites || !wasFavorited) {
+      return
+    }
+
+    // Card was just removed from favorites while browsing. Adjust navigation.
+    // `favorites` is the pre-toggle list, so filtering out the removed card gives us
+    // the expected post-toggle list without waiting for a state re-render.
+    const listAfterRemoval = favorites.filter((c) => c.id !== puzzleToToggle.id)
+    if (listAfterRemoval.length === 0) {
+      // No more favorites — exit browsing mode.
+      setIsBrowsingFavorites(false)
+      startFlipTo({ kind: 'setup' })
+      return
+    }
+    const nextIndex = Math.min(favoritesIndex, listAfterRemoval.length - 1)
+    setFavoritesIndex(nextIndex)
+    startFlipTo({ kind: 'puzzle', puzzle: restoreFromFavorite(listAfterRemoval[nextIndex]!) })
+  }, [
+    showBack,
+    backFace,
+    frontFace,
+    isBrowsingFavorites,
+    toggleFavorite,
+    isFavorited,
+    favorites,
+    favoritesIndex,
+    startFlipTo,
+    restoreFromFavorite,
+  ])
 
   const cardAngle = showBack ? 180 : 0
   const visibleFace = showBack ? backFace : frontFace
@@ -195,9 +330,26 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
     ? visibleFace.puzzle.name
     : 'Generator setup card'
 
+  const visiblePuzzleId = visibleFace.kind === 'puzzle' ? visibleFace.puzzle.id : null
+  const isCurrentFavorited = visiblePuzzleId ? isFavorited(visiblePuzzleId) : false
+
+  // Keep favoritesIndex in bounds if the list shrank (e.g. from another tab).
+  const clampedFavoritesIndex = favorites.length > 0
+    ? Math.min(favoritesIndex, favorites.length - 1)
+    : 0
+
   useEffect(() => {
     onBackAvailabilityChange(showBackButton, onBack)
   }, [onBackAvailabilityChange, onBack, showBackButton])
+
+  const faceProps = {
+    setCount,
+    onSetChange,
+    favoritesCount: favorites.length,
+    onBrowseFavorites,
+    isFavorited: isCurrentFavorited,
+    onToggleFavorite: onToggleCurrentFavorite,
+  }
 
   return (
     <main className="main-redesign">
@@ -210,18 +362,50 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
             aria-label={ariaLabel}
           >
             <div className="flip-face flip-front">
-              <Face content={frontFace} setCount={setCount} onSetChange={onSetChange} />
+              <Face content={frontFace} {...faceProps} />
             </div>
 
             <div className="flip-face flip-back">
-              <Face content={backFace} setCount={setCount} onSetChange={onSetChange} />
+              <Face content={backFace} {...faceProps} />
             </div>
           </article>
         </div>
 
-        <button type="button" className="generate-floating" onClick={onGenerate}>
-          Generate Card
-        </button>
+        {isBrowsingFavorites && favorites.length > 0 ? (
+          <div className="favorites-nav">
+            <button
+              type="button"
+              className="favorites-nav-btn"
+              onClick={onFavoritesPrev}
+              disabled={clampedFavoritesIndex === 0}
+              aria-label="Previous favorite"
+              title="Previous"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" fill="currentColor" />
+              </svg>
+            </button>
+            <span className="favorites-nav-count">
+              {clampedFavoritesIndex + 1} / {favorites.length}
+            </span>
+            <button
+              type="button"
+              className="favorites-nav-btn"
+              onClick={onFavoritesNext}
+              disabled={clampedFavoritesIndex === favorites.length - 1}
+              aria-label="Next favorite"
+              title="Next"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="generate-floating" onClick={onGenerate}>
+            Generate Card
+          </button>
+        )}
       </section>
     </main>
   )

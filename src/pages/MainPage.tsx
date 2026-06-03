@@ -229,54 +229,39 @@ export function MainPage({ onBackAvailabilityChange }: MainPageProps) {
       window.clearTimeout(settleTimerRef.current)
     }
 
-    const afterFlip = () => {
-      settleTimerRef.current = null
-      const next = pendingFaceRef.current
-      pendingFaceRef.current = null
-      if (next !== null) {
-        // Start the queued flip immediately after this one settles.
-        setIsFlipping(true)
-        const nowShowBack = showBackRef.current
-        if (nowShowBack) {
-          setFrontFace(next)
-          setShowBack(false)
-          settleTimerRef.current = window.setTimeout(() => {
-            setBackFace(next)
-            setIsFlipping(false)
-            settleTimerRef.current = null
-          }, FLIP_MS)
+    const doFlip = (face: FaceContent, currentShowBack: boolean) => {
+      const afterFlip = () => {
+        settleTimerRef.current = null
+        const next = pendingFaceRef.current
+        pendingFaceRef.current = null
+        if (next !== null) {
+          // Start the queued flip immediately after this one settles.
+          doFlip(next, showBackRef.current)
         } else {
-          setBackFace(next)
-          setShowBack(true)
-          settleTimerRef.current = window.setTimeout(() => {
-            setFrontFace(next)
-            setIsFlipping(false)
-            settleTimerRef.current = null
-          }, FLIP_MS)
+          setIsFlipping(false)
         }
+      }
+
+      if (currentShowBack) {
+        // Back is currently visible, so stage target on front then flip to front.
+        setFrontFace(face)
+        setShowBack(false)
+        settleTimerRef.current = window.setTimeout(() => {
+          setBackFace(face)
+          afterFlip()
+        }, FLIP_MS)
       } else {
-        setIsFlipping(false)
+        // Front is currently visible, so stage target on back then flip to back.
+        setBackFace(face)
+        setShowBack(true)
+        settleTimerRef.current = window.setTimeout(() => {
+          setFrontFace(face)
+          afterFlip()
+        }, FLIP_MS)
       }
     }
 
-    if (showBack) {
-      // Back is currently visible, so stage target on front then flip to front.
-      setFrontFace(target)
-      setShowBack(false)
-      settleTimerRef.current = window.setTimeout(() => {
-        setBackFace(target)
-        afterFlip()
-      }, FLIP_MS)
-      return
-    }
-
-    // Front is currently visible, so stage target on back then flip to back.
-    setBackFace(target)
-    setShowBack(true)
-    settleTimerRef.current = window.setTimeout(() => {
-      setFrontFace(target)
-      afterFlip()
-    }, FLIP_MS)
+    doFlip(target, showBack)
   }, [isFlipping, showBack])
 
   const onGenerate = useCallback(() => {
